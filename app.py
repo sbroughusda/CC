@@ -16,7 +16,7 @@ from commentbuilder import get_documents_for_docket, get_comments_for_document, 
 import cc2
 
 # Configure application
-app = Flask(__name__)
+app = Flask(__name__, static_folder='outputs')  # Set the outputs directory as static folder
 app.secret_key = os.urandom(24)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['OUTPUT_FOLDER'] = 'outputs'
@@ -204,6 +204,7 @@ def create_visualizations(df, folder):
     if 'Substantive' in df.columns and df['Substantive'].dtype == object:
         df['Substantive'] = df['Substantive'].map({'True': True, 'False': False})
     
+    # Create pie chart
     plt.figure(figsize=(8, 8))
     counts = df['Substantive'].value_counts()
     labels = ['Substantive', 'Non-substantive']
@@ -214,6 +215,45 @@ def create_visualizations(df, folder):
     pie_chart_path = os.path.join(folder, 'classification_pie.png')
     plt.savefig(pie_chart_path)
     plt.close()
+    
+    # Create confidence distribution chart
+    if 'Confidence' in df.columns:
+        plt.figure(figsize=(10, 6))
+        # Create separate series for substantive and non-substantive
+        substantive_conf = df[df['Substantive'] == True]['Confidence']
+        nonsubstantive_conf = df[df['Substantive'] == False]['Confidence']
+        
+        if len(substantive_conf) > 0 and len(nonsubstantive_conf) > 0:
+            plt.hist([substantive_conf, nonsubstantive_conf], bins=10, 
+                     label=['Substantive', 'Non-substantive'], alpha=0.7,
+                     color=['#4CAF50', '#F44336'])
+            plt.xlabel('Confidence Score')
+            plt.ylabel('Number of Comments')
+            plt.title('Confidence Score Distribution')
+            plt.legend()
+            plt.tight_layout()
+            
+            # Save chart
+            confidence_chart_path = os.path.join(folder, 'confidence_histogram.png')
+            plt.savefig(confidence_chart_path)
+        plt.close()
+    
+    # Create comment length comparison chart
+    if 'Comment_Length' in df.columns:
+        plt.figure(figsize=(10, 6))
+        substantive_len = df[df['Substantive'] == True]['Comment_Length']
+        nonsubstantive_len = df[df['Substantive'] == False]['Comment_Length']
+        
+        if len(substantive_len) > 0 and len(nonsubstantive_len) > 0:
+            plt.boxplot([substantive_len, nonsubstantive_len], labels=['Substantive', 'Non-substantive'])
+            plt.ylabel('Comment Length (characters)')
+            plt.title('Comment Length Comparison')
+            plt.tight_layout()
+            
+            # Save chart
+            length_chart_path = os.path.join(folder, 'length_comparison.png')
+            plt.savefig(length_chart_path)
+        plt.close()
 
 
 @app.route('/results')
@@ -225,17 +265,28 @@ def results():
     session_id = session['session_id']
     session_folder = os.path.join(app.config['OUTPUT_FOLDER'], session_id)
     df = pd.read_csv(os.path.join(session_folder, session['classified_csv']))
+    
+    if 'Substantive' in df.columns and df['Substantive'].dtype == object:
+        df['Substantive'] = df['Substantive'].map({'True': True, 'False': False})
+    
     substantive_examples = df[df['Substantive'] == True].head(5)
     nonsubstantive_examples = df[df['Substantive'] == False].head(5)
-    pie_chart = os.path.join('outputs', session_id, 'classification_pie.png')
+    
+    # Create paths for images relative to the static folder
+    pie_chart = f'/{session_id}/classification_pie.png'
+    confidence_chart = f'/{session_id}/confidence_histogram.png'
+    length_chart = f'/{session_id}/length_comparison.png'
+    
     return render_template('results.html',
                           docket_id=session.get('docket_id'),
                           total_comments=session.get('total_comments'),
                           substantive_comments=session.get('substantive_comments'),
                           nonsubstantive_comments=session.get('nonsubstantive_comments'),
-                          substantive_examples=substantive_examples,
-                          nonsubstantive_examples=nonsubstantive_examples,
-                          pie_chart=pie_chart)
+                          substantive_examples=substantive_examples.to_dict('records'),
+                          nonsubstantive_examples=nonsubstantive_examples.to_dict('records'),
+                          pie_chart=pie_chart,
+                          confidence_chart=confidence_chart,
+                          length_chart=length_chart)
 
 
 @app.route('/download/<filename>')
