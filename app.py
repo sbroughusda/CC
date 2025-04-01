@@ -14,9 +14,11 @@ import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from commentbuilder import get_documents_for_docket, get_comments_for_document, get_comment_details, save_comments_to_csv
 import cc2
+# Import the TextFeatureExtractor class directly to make it available in main namespace
+from cc2 import TextFeatureExtractor
 
 # Configure application
-app = Flask(__name__, static_folder='outputs')  # Set the outputs directory as static folder
+app = Flask(__name__)
 app.secret_key = os.urandom(24)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['OUTPUT_FOLDER'] = 'outputs'
@@ -152,6 +154,7 @@ def classify_comments():
             rule_features = classifier.read_pdf(pdf_path)
             
             # Load comments from CSV
+            # Need to temporarily copy the CSV to the current directory for the classifier
             temp_csv_path = os.path.basename(csv_path)
             os.system(f"cp '{csv_path}' '{temp_csv_path}'")
             
@@ -256,6 +259,17 @@ def create_visualizations(df, folder):
         plt.close()
 
 
+# Add a route to serve images directly
+@app.route('/image/<session_id>/<image_name>')
+def serve_image(session_id, image_name):
+    image_path = os.path.join(app.config['OUTPUT_FOLDER'], session_id, image_name)
+    if os.path.exists(image_path):
+        return send_file(image_path, mimetype='image/png')
+    else:
+        # Return a placeholder image or 404
+        return "Image not found", 404
+
+
 @app.route('/results')
 def results():
     if 'classified_csv' not in session:
@@ -272,10 +286,10 @@ def results():
     substantive_examples = df[df['Substantive'] == True].head(5)
     nonsubstantive_examples = df[df['Substantive'] == False].head(5)
     
-    # Create paths for images relative to the static folder
-    pie_chart = f'/{session_id}/classification_pie.png'
-    confidence_chart = f'/{session_id}/confidence_histogram.png'
-    length_chart = f'/{session_id}/length_comparison.png'
+    # Create URLs for the images using our new route
+    pie_chart = url_for('serve_image', session_id=session_id, image_name='classification_pie.png')
+    confidence_chart = url_for('serve_image', session_id=session_id, image_name='confidence_histogram.png')
+    length_chart = url_for('serve_image', session_id=session_id, image_name='length_comparison.png')
     
     return render_template('results.html',
                           docket_id=session.get('docket_id'),
