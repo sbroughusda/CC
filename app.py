@@ -4,11 +4,9 @@ import subprocess
 import uuid
 import time
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
 import io
 import base64
-import json
 from werkzeug.utils import secure_filename
 
 # Import functionality from your scripts
@@ -16,28 +14,10 @@ import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from commentbuilder import get_documents_for_docket, get_comments_for_document, get_comment_details, save_comments_to_csv
 import cc2
-# Import the TextFeatureExtractor class directly to make it available in main namespace
-from cc2 import TextFeatureExtractor
-
-# Custom JSON encoder to handle NumPy types
-class CustomJSONEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, np.integer):
-            return int(obj)
-        elif isinstance(obj, np.floating):
-            return float(obj)
-        elif isinstance(obj, np.ndarray):
-            return obj.tolist()
-        elif isinstance(obj, pd.Series):
-            return obj.tolist()
-        elif isinstance(obj, pd.DataFrame):
-            return obj.to_dict(orient='records')
-        return super(CustomJSONEncoder, self).default(obj)
 
 # Configure application
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
-app.json_encoder = CustomJSONEncoder  # Use our custom encoder
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['OUTPUT_FOLDER'] = 'outputs'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload size
@@ -102,7 +82,7 @@ def fetch_comments():
         # Store the CSV filename in the session
         session['csv_filename'] = csv_filename
         session['docket_id'] = docket_id
-        session['comment_count'] = int(len(all_comments))  # Convert to native int
+        session['comment_count'] = len(all_comments)
         
         flash(f'Successfully retrieved {len(all_comments)} comments for docket ID: {docket_id}', 'success')
         return redirect(url_for('upload_pdf'))
@@ -172,7 +152,6 @@ def classify_comments():
             rule_features = classifier.read_pdf(pdf_path)
             
             # Load comments from CSV
-            # Need to temporarily copy the CSV to the current directory for the classifier
             temp_csv_path = os.path.basename(csv_path)
             os.system(f"cp '{csv_path}' '{temp_csv_path}'")
             
@@ -201,34 +180,19 @@ def classify_comments():
             # Create visualizations
             df = pd.read_csv(os.path.join(session_folder, "classified_comments.csv"))
             
-            # Convert boolean strings to actual booleans if needed
-            if 'Substantive' in df.columns and df['Substantive'].dtype == object:
-                df['Substantive'] = df['Substantive'].map({'True': True, 'False': False})
-            
-            # Store results in session - make sure we're using native Python types
+            # Store results in session
             session['classified_csv'] = "classified_comments.csv"
-            session['total_comments'] = int(len(df))
+            session['total_comments'] = int(len(df))  # Convert to native int
+            session['substantive_comments'] = int(df['Substantive'].sum())  # Convert to native int
+            session['nonsubstantive_comments'] = int(len(df) - df['Substantive'].sum())  # Convert to native int
             
-            if 'Substantive' in df.columns:
-                substantive_count = int(df['Substantive'].sum())
-                nonsubstantive_count = int(len(df) - substantive_count)
-            else:
-                substantive_count = 0
-                nonsubstantive_count = int(len(df))
-                
-            session['substantive_comments'] = substantive_count
-            session['nonsubstantive_comments'] = nonsubstantive_count
-            
-            # Create visualizations
+            # Create visualizations and encode them as base64 for embedding in HTML
             create_visualizations(df, session_folder)
             
             return redirect(url_for('results'))
             
         except Exception as e:
-            import traceback
-            error_details = traceback.format_exc()
             flash(f'Error in classification process: {str(e)}', 'error')
-            print(f"Detailed error: {error_details}")
             return redirect(url_for('upload_pdf'))
     else:
         flash('Only PDF files are allowed', 'error')
@@ -237,63 +201,19 @@ def classify_comments():
 
 def create_visualizations(df, folder):
     """Create visualizations from classification results"""
-    # Ensure dataframe has correct types
     if 'Substantive' in df.columns and df['Substantive'].dtype == object:
-        # Convert to boolean if it's string
         df['Substantive'] = df['Substantive'].map({'True': True, 'False': False})
     
-    # 1. Pie chart of substantive vs non-substantive
     plt.figure(figsize=(8, 8))
-    counts = df['Substantive'].value_counts() if 'Substantive' in df.columns else pd.Series([0, len(df)], index=[True, False])
+    counts = df['Substantive'].value_counts()
     labels = ['Substantive', 'Non-substantive']
-    values = [int(counts.get(True, 0)), int(counts.get(False, 0))]
+    values = [counts.get(True, 0), counts.get(False, 0)]
     plt.pie(values, labels=labels, autopct='%1.1f%%', startangle=90, colors=['#4CAF50', '#F44336'])
     plt.title('Comment Classification Results')
     plt.tight_layout()
-    
-    # Save chart
     pie_chart_path = os.path.join(folder, 'classification_pie.png')
     plt.savefig(pie_chart_path)
     plt.close()
-    
-    # 2. Confidence distribution
-    plt.figure(figsize=(10, 6))
-    # Create separate series for substantive and non-substantive
-    if 'Substantive' in df.columns and 'Confidence' in df.columns:
-        substantive_conf = df[df['Substantive'] == True]['Confidence']
-        nonsubstantive_conf = df[df['Substantive'] == False]['Confidence']
-        
-        if len(substantive_conf) > 0 and len(nonsubstantive_conf) > 0:
-            plt.hist([substantive_conf, nonsubstantive_conf], bins=10, 
-                    label=['Substantive', 'Non-substantive'], alpha=0.7,
-                    color=['#4CAF50', '#F44336'])
-            plt.xlabel('Confidence Score')
-            plt.ylabel('Number of Comments')
-            plt.title('Confidence Score Distribution')
-            plt.legend()
-            plt.tight_layout()
-            
-            # Save chart
-            confidence_chart_path = os.path.join(folder, 'confidence_histogram.png')
-            plt.savefig(confidence_chart_path)
-    plt.close()
-    
-    # 3. Comment length comparison
-    if 'Comment_Length' in df.columns and 'Substantive' in df.columns:
-        plt.figure(figsize=(10, 6))
-        substantive_len = df[df['Substantive'] == True]['Comment_Length']
-        nonsubstantive_len = df[df['Substantive'] == False]['Comment_Length']
-        
-        if len(substantive_len) > 0 and len(nonsubstantive_len) > 0:
-            plt.boxplot([substantive_len, nonsubstantive_len], labels=['Substantive', 'Non-substantive'])
-            plt.ylabel('Comment Length (characters)')
-            plt.title('Comment Length Comparison')
-            plt.tight_layout()
-            
-            # Save chart
-            length_chart_path = os.path.join(folder, 'length_comparison.png')
-            plt.savefig(length_chart_path)
-        plt.close()
 
 
 @app.route('/results')
@@ -304,55 +224,18 @@ def results():
     
     session_id = session['session_id']
     session_folder = os.path.join(app.config['OUTPUT_FOLDER'], session_id)
-    
-    try:
-        # Read classified comments
-        df = pd.read_csv(os.path.join(session_folder, session['classified_csv']))
-        
-        # Convert string representations to actual booleans if needed
-        if 'Substantive' in df.columns and df['Substantive'].dtype == object:
-            df['Substantive'] = df['Substantive'].map({'True': True, 'False': False})
-        
-        # Get examples of substantive and non-substantive comments
-        if 'Substantive' in df.columns:
-            substantive_examples = df[df['Substantive'] == True].head(5)
-            nonsubstantive_examples = df[df['Substantive'] == False].head(5)
-        else:
-            substantive_examples = pd.DataFrame()
-            nonsubstantive_examples = pd.DataFrame()
-        
-        # Get paths to visualization images
-        pie_chart = os.path.join('outputs', session_id, 'classification_pie.png')
-        confidence_chart = os.path.join('outputs', session_id, 'confidence_histogram.png')
-        length_chart = os.path.join('outputs', session_id, 'length_comparison.png')
-        
-        # Get statistics from session
-        total_comments = session.get('total_comments', 0)
-        substantive_comments = session.get('substantive_comments', 0)
-        nonsubstantive_comments = session.get('nonsubstantive_comments', 0)
-        
-        # Convert to Python native types to ensure JSON serialization works
-        total_comments = int(total_comments)
-        substantive_comments = int(substantive_comments)
-        nonsubstantive_comments = int(nonsubstantive_comments)
-        
-        return render_template('results.html',
-                            docket_id=session.get('docket_id'),
-                            total_comments=total_comments,
-                            substantive_comments=substantive_comments,
-                            nonsubstantive_comments=nonsubstantive_comments,
-                            substantive_examples=substantive_examples,
-                            nonsubstantive_examples=nonsubstantive_examples,
-                            pie_chart=pie_chart,
-                            confidence_chart=confidence_chart,
-                            length_chart=length_chart)
-    
-    except Exception as e:
-        import traceback
-        error_details = traceback.format_exc()
-        flash(f'Error displaying results: {str(e)}', 'error')
-        print(f"Detailed error: {error_details}")
-        return redirect(url_for('index'))
+    df = pd.read_csv(os.path.join(session_folder, session['classified_csv']))
+    substantive_examples = df[df['Substantive'] == True].head(5)
+    nonsubstantive_examples = df[df['Substantive'] == False].head(5)
+    pie_chart = os.path.join('outputs', session_id, 'classification_pie.png')
+    return render_template('results.html',
+                          docket_id=session.get('docket_id'),
+                          total_comments=session.get('total_comments'),
+                          substantive_comments=session.get('substantive_comments'),
+                          nonsubstantive_comments=session.get('nonsubstantive_comments'),
+                          substantive_examples=substantive_examples,
+                          nonsubstantive_examples=nonsubstantive_examples,
+                          pie_chart=pie_chart)
 
 
 @app.route('/download/<filename>')
@@ -365,20 +248,16 @@ def download(filename):
     session_folder = os.path.join(app.config['OUTPUT_FOLDER'], session_id)
     
     if filename == 'original':
-        # Download the original comments CSV
         if 'csv_filename' not in session:
             flash('No comments file available', 'error')
             return redirect(url_for('results'))
-        
         file_path = os.path.join(session_folder, session['csv_filename'])
         return send_file(file_path, as_attachment=True)
     
     elif filename == 'classified':
-        # Download the classified comments CSV
         if 'classified_csv' not in session:
             flash('No classification results available', 'error')
             return redirect(url_for('results'))
-        
         file_path = os.path.join(session_folder, session['classified_csv'])
         return send_file(file_path, as_attachment=True)
     
@@ -389,7 +268,6 @@ def download(filename):
 
 @app.route('/reset')
 def reset():
-    # Clear session data
     session.clear()
     return redirect(url_for('index'))
 
