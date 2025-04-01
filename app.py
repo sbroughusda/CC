@@ -4,6 +4,7 @@ import subprocess
 import uuid
 import time
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 import io
 import base64
@@ -183,11 +184,20 @@ def classify_comments():
             # Create visualizations
             df = pd.read_csv(os.path.join(session_folder, "classified_comments.csv"))
             
-            # Store results in session
+            # Store results in session - convert numpy types to Python native types
             session['classified_csv'] = "classified_comments.csv"
-            session['total_comments'] = len(df)
-            session['substantive_comments'] = df['Substantive'].sum()
-            session['nonsubstantive_comments'] = len(df) - df['Substantive'].sum()
+            session['total_comments'] = int(len(df))
+            
+            # Convert numpy.int64 to Python int to avoid JSON serialization issues
+            if 'Substantive' in df.columns:
+                substantive_count = int(df['Substantive'].sum()) 
+                nonsubstantive_count = int(len(df) - df['Substantive'].sum())
+            else:
+                substantive_count = 0
+                nonsubstantive_count = 0
+                
+            session['substantive_comments'] = substantive_count
+            session['nonsubstantive_comments'] = nonsubstantive_count
             
             # Create visualizations and encode them as base64 for embedding in HTML
             create_visualizations(df, session_folder)
@@ -213,7 +223,7 @@ def create_visualizations(df, folder):
     plt.figure(figsize=(8, 8))
     counts = df['Substantive'].value_counts()
     labels = ['Substantive', 'Non-substantive']
-    values = [counts.get(True, 0), counts.get(False, 0)]
+    values = [int(counts.get(True, 0)), int(counts.get(False, 0))]
     plt.pie(values, labels=labels, autopct='%1.1f%%', startangle=90, colors=['#4CAF50', '#F44336'])
     plt.title('Comment Classification Results')
     plt.tight_layout()
@@ -273,9 +283,9 @@ def results():
     # Read a sample of classified comments for display
     df = pd.read_csv(os.path.join(session_folder, session['classified_csv']))
     
-    # Get 5 examples of substantive and non-substantive comments
-    substantive_examples = df[df['Substantive'] == True].head(5)
-    nonsubstantive_examples = df[df['Substantive'] == False].head(5)
+    # Get examples of substantive and non-substantive comments
+    substantive_examples = df[df['Substantive'] == True].head(5) if 'Substantive' in df.columns else pd.DataFrame()
+    nonsubstantive_examples = df[df['Substantive'] == False].head(5) if 'Substantive' in df.columns else pd.DataFrame()
     
     # Get paths to visualization images
     pie_chart = os.path.join('outputs', session_id, 'classification_pie.png')
