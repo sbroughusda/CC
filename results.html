@@ -23,7 +23,7 @@
                                    ({{ (nonsubstantive_comments / total_comments * 100) | round(1) }}%)</p>
                                 
                                 <div class="d-grid gap-2 mt-4">
-                                    <a href="{{ url_for('download', filename='classified') }}" class="btn btn-usda">
+                                    <a href="{{ url_for('download', filename='classified') }}" class="btn btn-success">
                                         Download Classified Comments (CSV)
                                     </a>
                                     <a href="{{ url_for('download', filename='original') }}" class="btn btn-outline-secondary">
@@ -43,7 +43,7 @@
                                 Classification Distribution
                             </div>
                             <div class="card-body text-center">
-                                <img src="{{ url_for('static', filename=pie_chart) }}" alt="Classification Distribution" class="img-fluid">
+                                <img src="{{ pie_chart }}" alt="Classification Distribution" class="img-fluid">
                             </div>
                         </div>
                     </div>
@@ -56,7 +56,7 @@
                                 Confidence Distribution
                             </div>
                             <div class="card-body text-center">
-                                <img src="{{ url_for('static', filename=confidence_chart) }}" alt="Confidence Distribution" class="img-fluid">
+                                <img src="{{ confidence_chart }}" alt="Confidence Distribution" class="img-fluid">
                             </div>
                         </div>
                     </div>
@@ -67,7 +67,7 @@
                                 Comment Length Comparison
                             </div>
                             <div class="card-body text-center">
-                                <img src="{{ url_for('static', filename=length_chart) }}" alt="Comment Length Comparison" class="img-fluid">
+                                <img src="{{ length_chart }}" alt="Comment Length Comparison" class="img-fluid">
                             </div>
                         </div>
                     </div>
@@ -81,21 +81,21 @@
                             </div>
                             <div class="card-body">
                                 <div class="accordion" id="substantiveAccordion">
-                                    {% for _, row in substantive_examples.iterrows() %}
+                                    {% for comment in substantive_examples %}
                                     <div class="accordion-item">
                                         <h2 class="accordion-header" id="substantiveHeading{{ loop.index }}">
                                             <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
                                                     data-bs-target="#substantiveCollapse{{ loop.index }}" aria-expanded="false" 
                                                     aria-controls="substantiveCollapse{{ loop.index }}">
-                                                Comment #{{ row.id if 'id' in row else loop.index }} 
-                                                (Confidence: {{ "%.1f"|format(row.Confidence*100) if 'Confidence' in row else 'N/A' }}%)
+                                                Comment #{{ comment.id if 'id' in comment else loop.index }} 
+                                                (Confidence: {{ "%.1f"|format(comment.Confidence*100) if 'Confidence' in comment else 'N/A' }}%)
                                             </button>
                                         </h2>
                                         <div id="substantiveCollapse{{ loop.index }}" class="accordion-collapse collapse" 
                                              aria-labelledby="substantiveHeading{{ loop.index }}" data-bs-parent="#substantiveAccordion">
                                             <div class="accordion-body">
-                                                <p><strong>Reason:</strong> <em>{{ row.Reason if 'Reason' in row else 'No reason provided' }}</em></p>
-                                                <p>{{ (row.comment[:500] + '...') if 'comment' in row and row.comment|length > 500 else row.comment }}</p>
+                                                <p><strong>Reason:</strong> <em>{{ comment.Reason if 'Reason' in comment else 'No reason provided' }}</em></p>
+                                                <p>{{ (comment.comment[:500] + '...') if 'comment' in comment and comment.comment|length > 500 else comment.comment }}</p>
                                             </div>
                                         </div>
                                     </div>
@@ -112,21 +112,21 @@
                             </div>
                             <div class="card-body">
                                 <div class="accordion" id="nonSubstantiveAccordion">
-                                    {% for _, row in nonsubstantive_examples.iterrows() %}
+                                    {% for comment in nonsubstantive_examples %}
                                     <div class="accordion-item">
                                         <h2 class="accordion-header" id="nonSubstantiveHeading{{ loop.index }}">
                                             <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
                                                     data-bs-target="#nonSubstantiveCollapse{{ loop.index }}" aria-expanded="false" 
                                                     aria-controls="nonSubstantiveCollapse{{ loop.index }}">
-                                                Comment #{{ row.id if 'id' in row else loop.index }} 
-                                                (Confidence: {{ "%.1f"|format(row.Confidence*100) if 'Confidence' in row else 'N/A' }}%)
+                                                Comment #{{ comment.id if 'id' in comment else loop.index }} 
+                                                (Confidence: {{ "%.1f"|format(comment.Confidence*100) if 'Confidence' in comment else 'N/A' }}%)
                                             </button>
                                         </h2>
                                         <div id="nonSubstantiveCollapse{{ loop.index }}" class="accordion-collapse collapse" 
                                              aria-labelledby="nonSubstantiveHeading{{ loop.index }}" data-bs-parent="#nonSubstantiveAccordion">
                                             <div class="accordion-body">
-                                                <p><strong>Reason:</strong> <em>{{ row.Reason if 'Reason' in row else 'No reason provided' }}</em></p>
-                                                <p>{{ (row.comment[:500] + '...') if 'comment' in row and row.comment|length > 500 else row.comment }}</p>
+                                                <p><strong>Reason:</strong> <em>{{ comment.Reason if 'Reason' in comment else 'No reason provided' }}</em></p>
+                                                <p>{{ (comment.comment[:500] + '...') if 'comment' in comment and comment.comment|length > 500 else comment.comment }}</p>
                                             </div>
                                         </div>
                                     </div>
