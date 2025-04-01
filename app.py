@@ -14,6 +14,8 @@ import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from commentbuilder import get_documents_for_docket, get_comments_for_document, get_comment_details, save_comments_to_csv
 import cc2
+# Import the TextFeatureExtractor class directly to make it available in main namespace
+from cc2 import TextFeatureExtractor
 
 # Configure application
 app = Flask(__name__)
