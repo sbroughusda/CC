@@ -23,8 +23,14 @@
                                    ({{ (nonsubstantive_comments / total_comments * 100) | round(1) }}%)</p>
                                 
                                 <div class="d-grid gap-2 mt-4">
+                                    <a href="{{ url_for('comment_viewer') }}" class="btn btn-primary">
+                                        View & Search Comments
+                                    </a>
                                     <a href="{{ url_for('download', filename='classified') }}" class="btn btn-success">
                                         Download Classified Comments (CSV)
+                                    </a>
+                                    <a href="{{ url_for('download', filename='classified_tsv') }}" class="btn btn-success">
+                                        Download Classified Comments (TSV)
                                     </a>
                                     <a href="{{ url_for('download', filename='original') }}" class="btn btn-outline-secondary">
                                         Download Original Comments (CSV)
